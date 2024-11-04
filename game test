@@ -1,0 +1,237 @@
+import pygame
+import random
+from pygame.locals import K_w, K_a, K_s, K_d, K_SPACE, K_ESCAPE, K_r, KEYDOWN, QUIT
+
+# Initialize pygame
+pygame.init()
+pygame.font.init()
+
+# Dynamically set screen dimensions
+INFO = pygame.display.Info()
+WIDTH, HEIGHT = min(INFO.current_w - 100, 1200), min(INFO.current_h - 100, 800)
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Alien Highway Game")
+
+# Colors
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLACK = (0, 0, 0)
+GRAY = (50, 50, 50)
+CYAN = (0, 200, 255)
+
+# Font for displaying text
+font = pygame.font.SysFont(None, 24)
+
+# Clock to control FPS
+clock = pygame.time.Clock()
+FPS = 60
+
+# Load helicopter and alien images
+try:
+    helicopter_image = pygame.image.load('apache_helicopter.png').convert_alpha()
+except pygame.error:
+    print("Failed to load helicopter image. Using placeholder.")
+    helicopter_image = pygame.Surface((50, 40))
+    helicopter_image.fill(WHITE)
+
+try:
+    alien_image1 = pygame.image.load('alien_ship.png').convert_alpha()
+    alien_image1 = pygame.transform.scale(alien_image1, (30, 20))
+except pygame.error:
+    print("Failed to load alien image 1. Using placeholder.")
+    alien_image1 = pygame.Surface((30, 20))
+    alien_image1.fill(RED)
+
+try:
+    alien_image2 = pygame.image.load('alien_ship2.png').convert_alpha()
+    alien_image2 = pygame.transform.scale(alien_image2, (30, 20))
+except pygame.error:
+    print("Failed to load alien image 2. Using placeholder.")
+    alien_image2 = pygame.Surface((30, 20))
+    alien_image2.fill(GRAY)
+
+# Health and shield settings
+SHIELD_MAX_ENERGY = 100
+HEALTH_MAX = 100
+LIVES = 3
+
+# Laser class
+class Laser:
+    def __init__(self, position, velocity, color=RED):
+        self.position = pygame.Vector2(position)
+        self.velocity = pygame.Vector2(velocity)
+        self.radius = 5
+        self.color = color
+
+    def move(self):
+        self.position += self.velocity
+
+    def draw(self):
+        pygame.draw.circle(screen, self.color, (int(self.position.x), int(self.position.y)), self.radius)
+
+    def get_rect(self):
+        return pygame.Rect(self.position.x - self.radius, self.position.y - self.radius, self.radius * 2, self.radius * 2)
+
+# Ship class
+class Ship:
+    def __init__(self):
+        self.image = pygame.transform.scale(helicopter_image, (50, 40))
+        self.reset()
+        self.lasers = []
+        self.velocity = 5
+
+    def reset(self):
+        self.rect = self.image.get_rect(center=(WIDTH // 2, HEIGHT - 60))
+        self.health = HEALTH_MAX
+        self.shield_energy = SHIELD_MAX_ENERGY
+        self.lives = LIVES
+        self.lasers.clear()
+
+    def move(self, dx, dy):
+        self.rect.x = max(0, min(WIDTH - self.rect.width, self.rect.x + dx * self.velocity))
+        self.rect.y = max(0, min(HEIGHT - self.rect.height, self.rect.y + dy * self.velocity))
+
+    def shoot(self):
+        front_position = (self.rect.centerx, self.rect.top)
+        self.lasers.append(Laser(front_position, (0, -10)))
+
+    def draw(self):
+        screen.blit(self.image, self.rect.topleft)
+        pygame.draw.rect(screen, WHITE, (10, 10, 100, 10))
+        pygame.draw.rect(screen, GREEN, (10, 10, self.health, 10))
+        pygame.draw.rect(screen, WHITE, (10, 25, 100, 10))
+        pygame.draw.rect(screen, CYAN, (10, 25, self.shield_energy, 10))
+        for i in range(self.lives):
+            pygame.draw.circle(screen, GREEN, (WIDTH - 20 - i * 30, 20), 10)
+
+# AlienShip class
+class AlienShip:
+    def __init__(self):
+        self.image = random.choice([alien_image1, alien_image2])
+        self.rect = self.image.get_rect(topleft=(random.randint(0, WIDTH - 50), random.randint(-150, -50)))
+        self.velocity = pygame.Vector2(0, random.randint(2, 5))
+        self.lasers = []
+
+    def move(self):
+        self.rect.y += self.velocity.y
+        if self.rect.top > HEIGHT:
+            self.rect.x = random.randint(0, WIDTH - self.rect.width)
+            self.rect.y = random.randint(-150, -50)
+
+    def shoot(self):
+        if random.random() < 0.01:
+            front_position = (self.rect.centerx, self.rect.bottom)
+            self.lasers.append(Laser(front_position, (0, 5), color=CYAN))
+
+    def draw(self):
+        screen.blit(self.image, self.rect.topleft)
+
+# Menu screen function with welcome message
+def menu():
+    while True:
+        screen.fill(BLACK)
+        title_surface = font.render("Alien Highway Game", True, WHITE)
+        welcome_message = [
+            "Welcome rookie. Get suited up.",
+            "Today you are tasked with completing 100 levels in this here simulator.",
+            "We were unprepared for the first invasion,",
+            "but today we will make sure you are ready",
+            "to protect humanity's future at all cost."
+        ]
+
+        screen.blit(title_surface, (WIDTH // 2 - title_surface.get_width() // 2, HEIGHT // 2 - 120))
+
+        for i, line in enumerate(welcome_message):
+            line_surface = font.render(line, True, WHITE)
+            screen.blit(line_surface, (WIDTH // 2 - line_surface.get_width() // 2, HEIGHT // 2 - 60 + i * 30))
+
+        start_surface = font.render("Press Enter to Start", True, WHITE)
+        screen.blit(start_surface, (WIDTH // 2 - start_surface.get_width() // 2, HEIGHT // 2 + 100))
+        
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                return None
+            elif event.type == KEYDOWN:
+                if event.key == K_RETURN:
+                    return True
+
+# Game loop
+def game_loop():
+    ship = Ship()
+    aliens = [AlienShip() for _ in range(5)]
+    score = 0
+
+    while True:
+        screen.fill(BLACK)
+        ship.draw()
+        for alien in aliens:
+            alien.move()
+            alien.shoot()
+            alien.draw()
+
+        for laser in ship.lasers[:]:
+            laser.move()
+            if laser.position.y < 0:
+                ship.lasers.remove(laser)
+            else:
+                laser.draw()
+                for alien in aliens[:]:
+                    if laser.get_rect().colliderect(alien.rect):
+                        aliens.remove(alien)
+                        score += 10
+                        ship.lasers.remove(laser)
+                        break
+
+        for alien in aliens:
+            for laser in alien.lasers[:]:
+                laser.move()
+                if laser.position.y > HEIGHT:
+                    alien.lasers.remove(laser)
+                else:
+                    laser.draw()
+                    if laser.get_rect().colliderect(ship.rect):
+                        ship.health -= 10
+                        alien.lasers.remove(laser)
+                        if ship.health <= 0:
+                            ship.lives -= 1
+                            if ship.lives > 0:
+                                ship.reset()
+                            else:
+                                pygame.quit()
+                                return
+
+        score_surface = font.render(f"Score: {score}", True, WHITE)
+        screen.blit(score_surface, (10, 45))
+        controls_surface = font.render("Controls: Arrow Keys / WASD, R to Restart, ESC to Quit", True, WHITE)
+        screen.blit(controls_surface, (WIDTH - 350, HEIGHT - 30))
+
+        for event in pygame.event.get():
+            if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
+                pygame.quit()
+                return
+            elif event.type == KEYDOWN:
+                if event.key == K_SPACE:
+                    ship.shoot()
+                elif event.key == K_r:
+                    ship.reset()
+                    score = 0
+
+        keys = pygame.key.get_pressed()
+        dx, dy = (keys[K_d] - keys[K_a], keys[K_s] - keys[K_w])
+        ship.move(dx, dy)
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+# Start the game
+def main():
+    if menu():
+        game_loop()
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
